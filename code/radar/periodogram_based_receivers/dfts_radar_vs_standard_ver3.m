@@ -12,73 +12,79 @@
 % ALSO: this script compares the performance of the reciprocal filter both
 % with and without the DFT-spread stage.
 
-IEEEstandard = "802.11a"; % the IEEE standard that we want to simulate...
+IEEEstandard = "802.11p"; % the IEEE standard that we want to simulate...
 
-% Let us define the OFDM system parameters based on the IEEE 802 standard
+% Let us define the OFDM system parameters based on the IEEE 802.11 standard
 % in use:
 switch (IEEEstandard)
     case "802.11a"
-        To = 4e-6; % the OFDM symbol duration (period)
+        subcarrierSpacing = 312.5e3; % subcarrier spacing for 802.11a
+        Tu = 1/subcarrierSpacing; % the "useful" symbol period
+        G = 1/8; % the guard interval fraction
+        Tg = G*Tu; % the guard interval time
+        To = Tu + Tg; % the OFDM symbol duration (period)
         fC = 5.5e9; % 802.11a uses the 5 GHz band
         N = 52; % 48 for data, and 4 pilot tones
-        numPilotTones = 4; % no. pilot tones used
-        M = 7; % no. of symbols in a frame or burst
-        G = 1/4; % the guard interval fraction for 802.11a 
-        subcarrierSpacing = 312.5e3; % subcarrier spacing for 802.11a
+        numPilotTones = 4; % no. pilot tones used 
     case "802.11g"
-        To = 4e-6; % the OFDM symbol duration (period)
-        fC = 2.4e9; % 802.11g uses the 2.4 GHz band
+        subcarrierSpacing = 312.5e3; % subcarrier spacing for 802.11g
+        Tu = 1/subcarrierSpacing; % the "useful" symbol period
+        G = 1/8; % the guard interval fraction
+        Tg = G*Tu; % the guard interval time
+        To = Tu + Tg; % the OFDM symbol duration (period)
+        fC = 2.4e9; % 802.11a uses the 2.4 GHz band
         N = 52; % 48 for data, and 4 pilot tones
         numPilotTones = 4; % no. pilot tones used
-        M = 7; % no. of symbols in a frame or burst
-        G = 1/4; % the guard interval fraction for 802.11g
-        subcarrierSpacing = 312.5e3; % subcarrier spacing for 802.11g
+    case "802.11p"
+        subcarrierSpacing = 78.125e3; % subcarrier spacing for 802.11g
+        Tu = 1/subcarrierSpacing; % the "useful" symbol period
+        G = 1/8; % the guard interval fraction
+        Tg = G*Tu; % the guard interval time
+        To = Tu + Tg; % the OFDM symbol duration (period)
+        fC = 5.9e9; % 802.11a uses the 2.4 GHz band
+        N = 52; % 48 for data, and 4 pilot tones
+        numPilotTones = 4; % no. pilot tones used
+    otherwise
+        subcarrierSpacing = 312.5e3; % subcarrier spacing for 802.11a
+        Tu = 1/subcarrierSpacing; % the "useful" symbol period
+        G = 1/8; % the guard interval fraction
+        Tg = G*Tu; % the guard interval time
+        To = Tu + Tg; % the OFDM symbol duration (period)
+        fC = 5.5e9; % 802.11a uses the 5 GHz band
+        N = 16; % 48 for data, and 4 pilot tones
+        numPilotTones = 4; % no. pilot tones used
 end
 
+M = 14; % no. of blocks or symbols being used in OFDM frame
 L = 4*N; % size of Tx-side IFFT block
 
 % Info. on modulation:
 modType = "QAM"; % type of modulation being used
 modOrder = 16; % order of modulation
 
-switch (modType)
-    case "QAM"
-        codeRate = 1/2;
-        signalSet = qammod((0:modOrder-1), modOrder, "UnitAveragePower", true); % Generate the signal set for the relevant QAM scheme (16, 32, 64 etc.)     
-    case "PSK"
-        codeRate = 1/2;
-        signalSet = pskmod((0:modOrder-1), modOrder);
-    otherwise
-        disp("Check the status of 'modulationType' above.")
-        return % Exit the program early
-end
-
-% Let us work out the approximate bandwidth (B) of the system, as well as
-% the data rate:
-bitsPerComplexSymbol = log2(modOrder); % no. bits per complex symbol
-bitsPerOFDMsymbol = (N-numPilotTones)*bitsPerComplexSymbol*codeRate;
-dataRate = (bitsPerOFDMsymbol/To)/10^6; % data rate in Mbits/s
-bandwidth1 = (N*subcarrierSpacing)/1e6; % the bandwidth used
-bandwidth2 = (L*subcarrierSpacing)/1e6; % the bandwidth when DFT-S is used
-
-% And we can print the results to the console:
-fprintf("The bandwidth used by the standard system is %f MHz.\n", bandwidth1)
-fprintf("The bandwidth used by the DFT-S OFDM system is %f MHz.\n", bandwidth2)
-fprintf("The data rate is %d Mbits/s.\n", dataRate)
-
 % Boolean variable to control whether the CP is removed or not before
 % processing on the receive side:
 removeCP = false;
-
 % The boolean variables below control which graphs get generated:
 plotNormalHeatMap = true;
 plotDFTspreadHeatMap = true;
 
 % The boolean variable below controls whether Hermitian symmetry is used in
 % when forming the transmit frame (Ftx) for the non DFT-spread use case:
-useHermitianSymmetry = true;
+useHermitianSymmetry = false;
+
 % Info. on mapping from DFT block to IFFT block (Tx side):
 mapType = "interleave";
+
+switch (modType)
+    case "QAM"
+        signalSet = qammod((0:modOrder-1), modOrder, "UnitAveragePower", true); % Generate the signal set for the relevant QAM scheme (16, 32, 64 etc.)     
+    case "PSK"
+        signalSet = pskmod((0:modOrder-1), modOrder);
+    otherwise
+        disp("Check the status of 'modulationType' above.")
+        return % Exit the program early
+end
 
 Ftx = zeros(N, M); % a frame to hold our transmit symbols
 
@@ -132,14 +138,13 @@ end
 symbolMapOp(L/2 + 2:end, :) = conj(flip(symbolMapOp(2:L/2, :), 1));
 
 % Add Cylic Prefix (CP):
-cpLen1 = G*L; % the cyclic prefix (CP) length
-cpLen2 = G*N; % the CP for when no DFT-S is implemented...
+cpLen = floor(G*L); % the cyclic prefix (CP) length
 
 % Taking the bottom section of the symbolMapOp matrix and prefixing it to
 % the top of the symbolMapOp matrix. This has the effect of adding the CP
 % to each column (OFDM symbol):
-symbolMapOp = [symbolMapOp(end-cpLen1+1:end, :); symbolMapOp];
-FtxCopy = [FtxCopy(end-cpLen2+1:end, :); FtxCopy]; % used in forming s2
+symbolMapOp = [symbolMapOp(end-cpLen+1:end, :); symbolMapOp];
+FtxCopy = [FtxCopy(end-cpLen+1:end, :); FtxCopy]; % used in forming s2
 
 % Forming our two transmit sequences. s1 is the transmit sequence resulting
 % from the use of the DFT-spread technique. s2 is the transmit sequence
@@ -148,49 +153,48 @@ FtxCopy = [FtxCopy(end-cpLen2+1:end, :); FtxCopy]; % used in forming s2
 s1 = symbolMapOp(:);
 s2 = FtxCopy(:);
 
+% Let us also workout the peak-to-average power in each case:
+PAPR1 = max(abs(s1).^2)/mean(abs(s1).^2); % PAPR when DFT spread is used
+PAPR2 = max(abs(s2).^2)/mean(abs(s2).^2); % PAPR when no DFT-spread is used
+
 % Target parameters:
-a = 2e-5; % how much the signal is attenuated by the target
+a = 6e-3; % how much the signal is attenuated by the target
 fD = 100; % the doppler shift caused by the target
 delay = 10; % the delay of the received signal (r) in units of samples
 
 % Channel parameters:
-SNR = 22; % the channel SNR in dB
+noisedBW = -30; % noise level in dBW
+% We have two noise vectors: one for s1, and another for s2.
+Z1 = wgn(length(s1), 1, noisedBW, 'complex');
+Z2 = wgn(length(s2), 1, noisedBW, 'complex');
 
 % Computing the received signal r:
-p1 = 0:(L+cpLen1)*M - 1; % an index variable used working out r1
-p2 = 0:(N+cpLen2)*M - 1; % another used for working out r2
-dopplerShift1 = exp(1i*2*pi*fD*p1/(L+cpLen1)).'; % for r1 expression
-dopplerShift2 = exp(1i*2*pi*fD*p2/(N+cpLen2)).'; % for r2 expression
-
-pow2db(mean(abs([zeros(delay, 1); dopplerShift1.*s1]).^2))
-pow2db(mean(abs([zeros(delay, 1); dopplerShift2.*s2]).^2))
-
-r1 = awgn(a*dopplerShift1.*s1, SNR, 'measured');
-r2 = awgn(a*dopplerShift2.*s2, SNR, 'measured');
-
-r1 = [zeros(delay, 1); r1];
-r2 = [zeros(delay, 1); r2];
+p1 = 0:(L+cpLen)*M - 1; % an index variable used working out r1
+p2 = 0:(N+cpLen)*M - 1; % another used for working out r2
+dopplerShift1 = exp(1i*2*pi*fD*p1/(L+cpLen)).'; % for r1 expression
+dopplerShift2 = exp(1i*2*pi*fD*p2/(N+cpLen)).'; % for r2 expression
+r1 = [zeros(delay, 1); a*dopplerShift1.*s1 + Z1]; % defining r1
+r2 = [zeros(delay, 1); a*dopplerShift2.*s2 + Z2]; % defining r2
 
 % At the receiver, there will be a section of the receive sequence which
 % will be unused during the correlation process.
 r1 = r1(1:length(s1));
 r2 = r2(1:length(s2));
-
 % Reshaping the transmit and receive sequences in order to allow for more
 % easier block-by-block processing:
-r1 = reshape(r1, L+cpLen1, M);
-s1 = reshape(s1, L+cpLen1, M);
-r2 = reshape(r2, N+cpLen2, M);
-s2 = reshape(s2, N+cpLen2, M);
+r1 = reshape(r1, L+cpLen, M);
+s1 = reshape(s1, L+cpLen, M);
+r2 = reshape(r2, N+cpLen, M);
+s2 = reshape(s2, N+cpLen, M);
 
 % Some signal processing techniques are based on retaining the cyclic
 % prefix (CP). Others require the CP to be removed. With this in mind, 
 % we will make it easy to decide whether the CP is to be removed or not:
 if (removeCP == true) % removeCP is a boolean variable defined at the top
-    r1 = r1(cpLen1+1:end, :);
-    s1 = s1(cpLen1+1:end, :);
-    r2 = r2(cpLen2+1:end, :);
-    s2 = s2(cpLen2+1:end, :);
+    r1 = r1(cpLen+1:end, :);
+    s1 = s1(cpLen+1:end, :);
+    r2 = r2(cpLen+1:end, :);
+    s2 = s2(cpLen+1:end, :);
 end
 
 % Receiver-side Processing. We will have two index vectors: p1 and p2
@@ -288,7 +292,7 @@ delayVec2 = -size(r2, 1)+1:size(r2, 1)-1;
 delayLabels1 = string(delayVec1);
 delayLabels2 = string(delayVec2);
 delayLabels1(~(mod(delayVec1, 10) == 0)) = ""; % if value in vector is NOT divisble by 10, leave blank
-delayLabels2(~(mod(delayVec2, 10) == 0)) = ""; % if value in vector is NOT divisble by 10, leave blank
+delayLabels2(~(mod(delayVec2, 5) == 0)) = ""; % if value in vector is NOT divisble by 10, leave blank
 freqLabels = string(nu);
 freqLabels(~(mod(nu, 10) == 0)) = ""; % if value in vector is NOT divisble by 10, leave blank
 
@@ -297,9 +301,10 @@ freqLabels(~(mod(nu, 10) == 0)) = ""; % if value in vector is NOT divisble by 10
 if (plotDFTspreadHeatMap)
     figure(1)
     h1 = heatmap(delayVec1, nu, abs(X1), 'Colormap', jet(300));
-    title("\fontsize{14}\fontname{Georgia}Reciprocal Filter with DFT-spread (\tau = " + delay + ", f_{D} = " + fD + " Hz, SNR = " + SNR + " dB, " + "N = " + N + ", M = " + M + ", " + modOrder + "-" + modType + ", G = " + G + ")");
+    title("\fontsize{14}\fontname{Georgia}Reciprocal Filter with DFT-spread (\tau = " + delay + ", f_{D} = " + fD + " Hz, \sigma^{2} = " + noisedBW + " dBW, " + "N = " + N + ", M = " + M + ", " + modOrder + "-" + modType + ", G = " + G + ")");
     xlabel('\fontname{Georgia}\bf Delay (Samples)');
     ylabel('\fontname{Georgia}\bf\itf\rm\bf (Hz)');
+    set(gca,'Fontname', 'Georgia');
     h1.XDisplayLabels = delayLabels1;
     h1.YDisplayLabels = freqLabels;
 end
@@ -307,9 +312,10 @@ end
 if (plotNormalHeatMap)
     figure(2)
     h2 = heatmap(delayVec2, nu, abs(X2), 'Colormap', jet(300));
-    title("\fontsize{14}\fontname{Georgia}Reciprocal Filter (\tau = " + delay + ", f_{D} = " + fD + " Hz, SNR = " + SNR + " dB, " + "N = " + N + ", M = " + M + ", " + modOrder + "-" + modType + ", G = " + G + ")");
+    title("\fontsize{14}\fontname{Georgia}Reciprocal Filter (\tau = " + delay + ", f_{D} = " + fD + " Hz, \sigma^{2} = " + noisedBW + " dBW, " + "N = " + N + ", M = " + M + ", " + modOrder + "-" + modType + ", G = " + G + ")");
     xlabel('\fontname{Georgia}\bf Delay (Samples)');
     ylabel('\fontname{Georgia}\bf\itf\rm\bf (Hz)');
+    set(gca,'Fontname', 'Georgia');
     h2.XDisplayLabels = delayLabels2;
     h2.YDisplayLabels = freqLabels;
 end

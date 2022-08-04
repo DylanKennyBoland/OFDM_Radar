@@ -174,7 +174,7 @@ switch (mapType)
         return
 end
 
-% Pass throught the Rx-side IFFT block:
+% Pass through the Rx-side IFFT block:
 R = ifft(R);
 
 R = R(:); % turning R from a matrix to a row or column vector

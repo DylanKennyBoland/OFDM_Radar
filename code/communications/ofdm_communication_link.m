@@ -14,7 +14,7 @@ plotConstellation1 = false;
 plotConstellation2 = false;
 % Boolean variable to plot the graphs illustrating the effect of the cylic
 % prefix:
-plotCPchart = false;
+plotCPchart = true;
 
 % Boolean variable to decide whether to plot the graph that illustrates
 % what can happen when the cyclic prefix lenght is smaller than the channel
@@ -26,7 +26,7 @@ plotCPlenVsChannelDelay = true;
 useLongDelayChannel = true;
 
 % Boolean variable to control whether cyclic prefix is used or not:
-useCP = true;
+useCP = false;
 
 IEEEstandard = "802.11a"; % the IEEE standard that we want to simulate...
 
@@ -54,19 +54,19 @@ switch (IEEEstandard)
 end
 
 % No. OFDM symbols in frame or "burst"
-M = 28;
+M = 32;
 
 % Info. on modulation scheme being used:
 modType = "QAM";
-modOrder = 64;
+modOrder = 16;
 bitsPerSymbol = log2(modOrder); % no. bits per complex symbol
 
 % Channel information:
-h = [0.8; 0.51; 0.4]; % channel coefficients...
+h = [0.96; 0.21; 0.15]; % channel coefficients...
 if (useLongDelayChannel)
     % by making the channel long, we can show what happens when the maximum
     % delay of the channel is greater than the cylic prefix:
-    h = [h; 0.1*rand(30, 1)];
+    h = [h; 0.1*rand(8, 1)];
 end
 
 if (useCP == true)
@@ -109,7 +109,7 @@ s = [ofdmSymbols(end-cpLen+1:end, :); ofdmSymbols];
 r = zeros(size(s, 1)+length(h)-1, M);
 r_noise = zeros(size(s, 1)+length(h)-1, M);
 
-SNRdB = 28; % channel SNR in dB
+SNRdB = 20; % channel SNR in dB
 
 for j = 1:M
     r(:, j) = conv(h, s(:, j));
